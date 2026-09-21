@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soft Week Studio — QR Transfer Test v2</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f5f2ff;color:#211f2d}
+.wrap{max-width:760px;margin:auto;padding:24px 16px 48px}.card{background:#fff;border-radius:22px;padding:20px;margin:14px 0;box-shadow:0 8px 30px rgba(40,25,80,.09)}
+h1{font-size:25px;margin:0 0 6px}h2{font-size:18px;margin:0 0 12px}p{line-height:1.5;color:#625d70}
+button,input{font:inherit}button{border:0;border-radius:13px;padding:12px 16px;background:#6f4bf6;color:#fff;font-weight:700}
+button.secondary{background:#ece8ff;color:#4326b5}input{width:100%;padding:12px;border:1px solid #d9d3e8;border-radius:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap}.status{padding:12px;border-radius:12px;background:#f0edf8;white-space:pre-wrap}
+.qr{width:min(300px,82vw);height:min(300px,82vw);margin:16px auto;border:1px dashed #b8afd1;border-radius:18px;display:flex;align-items:center;justify-content:center;background:#faf9ff;overflow:hidden}
+.qr img{width:100%;height:100%}.small{font-size:13px;color:#777080}.hidden{display:none}
+video{width:100%;max-height:430px;object-fit:cover;border-radius:18px;background:#111}
+#reader{position:relative;margin-top:14px}#scanLine{position:absolute;left:8%;right:8%;top:50%;height:2px;background:#fff;box-shadow:0 0 12px #fff}
+code{word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="card"><h1>Soft Week Studio</h1><p style="margin-top:4px">QR Transfer Test v2</p><div class="status" id="status">Ready.</div></div>
+
+<div class="card"><h2>License Test</h2><p>Create and activate a demo license on Device A, then use it for the QR transfer test.</p><div class="row"><button id="licenseCreate">Create Test License</button><button id="licenseReset" class="secondary">Reset License Test</button></div><div id="licenseBox" class="hidden" style="margin-top:12px"><div class="small">Test license code:</div><code id="licenseCode"></code></div><input id="licenseInput" placeholder="Enter license code" style="margin-top:12px"><button id="licenseActivate" style="margin-top:10px">Activate License</button><div class="status" id="licenseStatus" style="margin-top:12px">No license selected.</div></div>
+<div class="card"><h2>Transfer Status</h2><div class="status" id="transferLicenseStatus">No transfer token scanned yet.</div><button id="completeTransfer" class="hidden" style="margin-top:10px">Complete Transfer on This Device</button></div>
+<div class="card">
+<h2>Device A — Create Transfer QR</h2>
+<p>On the tablet, create the temporary QR and keep it visible.</p>
+<button id="create">Create Transfer QR</button>
+<div id="qrArea" class="hidden"><div class="qr"><img id="qr" alt="Temporary transfer QR"></div><div class="small">Transfer URL:</div><code id="url"></code></div>
+</div>
+
+<div class="card">
+<h2>Device B — Scan the QR</h2>
+<p>On the Samsung, press the button. The page will ask for camera permission and open the rear camera.</p>
+<button id="scan">Scan QR Code</button>
+<button id="stop" class="secondary hidden">Stop Camera</button>
+<div id="reader" class="hidden"><video id="video" playsinline muted></video><div id="scanLine"></div></div>
+<div class="status" id="result" style="margin-top:12px">No scan yet.</div>
+</div>
+
+<div class="card">
+<h2>If the camera still does not open</h2>
+<p>Use this only as a diagnostic test.</p>
+<input id="manual" placeholder="Paste the transfer URL">
+<button id="process" style="margin-top:10px">Process URL</button>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let stream=null,detector=null,frame=0,transferUrl="";
+function status(t){$("status").textContent=t}
+function token(){const b=new Uint8Array(24);crypto.getRandomValues(b);return [...b].map(x=>x.toString(16).padStart(2,"0")).join("")}
+function makeUrl(){const u=new URL(location.href);const t=token();u.searchParams.set("transfer","1");u.searchParams.set("token",t);const a=JSON.parse(localStorage.getItem("sws_license_transfer_test")||"{}");if(a.code)u.searchParams.set("license",a.code);return u.toString()}
+function processValue(value){
+ try{const u=new URL(value),t=u.searchParams.get("token"),lc=u.searchParams.get("license");if(!t)throw 0;
+ $("result").textContent="QR recognized successfully.\n\nTransfer token detected:\n"+t+(lc?"\n\nLicense: "+lc:"")+"\n\nReady for the license transfer test.";
+ if(lc){$("transferLicenseStatus").textContent="Transfer token recognized.\nLicense: "+lc+"\n\nThis Samsung can now claim the demo license.";$("completeTransfer").classList.remove("hidden");window.__scannedLicense=lc;window.__scannedToken=t}
+ status("QR scan successful.")
+ }catch{$("result").textContent="The scanned code is not a valid Soft Week Studio transfer URL.";status("Invalid transfer QR.")}
+}
+$("create").onclick=()=>{
+ transferUrl=makeUrl();$("url").textContent=transferUrl;
+ $("qr").src="https://api.qrserver.com/v1/create-qr-code/?size=700x700&data="+encodeURIComponent(transferUrl);
+ $("qrArea").classList.remove("hidden");status("QR created. Keep it visible on the tablet.")
+};
+async function start(){
+ if(!window.isSecureContext){status("Camera access requires HTTPS. Open this page from an HTTPS website, not as a local file.");return}
+ if(!navigator.mediaDevices?.getUserMedia){status("This browser does not provide camera access on this page.");return}
+ try{
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});
+  $("video").srcObject=stream;$("reader").classList.remove("hidden");$("scan").classList.add("hidden");$("stop").classList.remove("hidden");await $("video").play();
+  status("Camera active. Point the Samsung at the QR on the tablet.");await loadDecoder();scanFrames()
+ }catch(e){status("Camera permission/start failed: "+(e.message||e))}
+}
+async function loadDecoder(){
+ if(window.BarcodeDetector){try{detector=new BarcodeDetector({formats:["qr_code"]});return}catch{}}
+ await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";s.onload=resolve;s.onerror=reject;document.head.appendChild(s)})
+}
+function scanFrames(){
+ if(!stream)return;
+ if(detector){detector.detect($("video")).then(c=>{if(c?.length){stop();processValue(c[0].rawValue);return}frame=requestAnimationFrame(scanFrames)}).catch(()=>frame=requestAnimationFrame(scanFrames));return}
+ if(typeof jsQR==="function"){
+  const v=$("video"),c=document.createElement("canvas");c.width=v.videoWidth||640;c.height=v.videoHeight||480;const x=c.getContext("2d",{willReadFrequently:true});
+  if(v.readyState>=2){x.drawImage(v,0,0,c.width,c.height);const img=x.getImageData(0,0,c.width,c.height);const r=jsQR(img.data,img.width,img.height,{inversionAttempts:"attemptBoth"});if(r){stop();processValue(r.data);return}}
+ }
+ frame=requestAnimationFrame(scanFrames)
+}
+function stop(){if(frame)cancelAnimationFrame(frame);frame=0;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("video").srcObject=null;$("reader").classList.add("hidden");$("scan").classList.remove("hidden");$("stop").classList.add("hidden")}
+$("scan").onclick=start;$("stop").onclick=stop;$("process").onclick=()=>processValue($("manual").value.trim());window.addEventListener("beforeunload",stop);
+</script>
+<script>(function(){const L=id=>document.getElementById(id);let state=JSON.parse(localStorage.getItem("sws_license_transfer_test")||"{}");function save(){localStorage.setItem("sws_license_transfer_test",JSON.stringify(state))}function make(){let b=new Uint8Array(10);crypto.getRandomValues(b);let h=[...b].map(x=>x.toString(16).padStart(2,"0")).join("").toUpperCase();return"SWS-"+h.slice(0,4)+"-"+h.slice(4,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)}function dev(){let d=localStorage.getItem("sws_license_test_device");if(!d){d=crypto.randomUUID();localStorage.setItem("sws_license_test_device",d)}return d}function show(){if(!state.code){L("licenseStatus").textContent="No license selected.";return}L("licenseStatus").textContent="License: "+state.code+"\nStatus: "+(state.status||"UNUSED")+"\nAuthorized device: "+(state.deviceId?"Yes":"None")+"\nTransfer: "+(state.transferActive?"Ready":"None")+"\nTransfer used: "+(state.transferUsed?"Yes":"No")}L("licenseCreate").onclick=()=>{state={code:make(),status:"UNUSED",deviceId:null,transferActive:false,transferUsed:false};save();L("licenseCode").textContent=state.code;L("licenseInput").value=state.code;L("licenseBox").classList.remove("hidden");show()};L("licenseActivate").onclick=()=>{let c=L("licenseInput").value.trim().toUpperCase();if(!c||c!==state.code){L("licenseStatus").textContent="Invalid License.";return}if(state.status==="REVOKED"){L("licenseStatus").textContent="License Revoked.";return}state.status="ACTIVE";state.deviceId=dev();save();show()};L("licenseReset").onclick=()=>{if(confirm("Reset the license test on this device?")){localStorage.removeItem("sws_license_transfer_test");localStorage.removeItem("sws_license_test_device");location.reload()}};L("completeTransfer").onclick=()=>{let c=window.__scannedLicense,t=window.__scannedToken;if(!c||!t)return;state={code:c,status:"ACTIVE",deviceId:dev(),transferActive:false,transferUsed:true,claimedToken:t,claimedAt:Date.now()};save();L("transferLicenseStatus").textContent="Transfer completed on this device.\nLicense: "+c+"\nStatus: ACTIVE\nAuthorized device: Yes\n\nDemo note: Device A cannot be changed from Device B until the real Soft Week Studio license server is added.";L("completeTransfer").classList.add("hidden");show()};if(state.code){L("licenseCode").textContent=state.code;L("licenseInput").value=state.code;L("licenseBox").classList.remove("hidden");show()}})();</script></body></html>
