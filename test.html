@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Soft Week Studio License Server Test</title>
+<style>body{font-family:system-ui;margin:0;background:#f5f2ff;color:#211f2d}.wrap{max-width:720px;margin:auto;padding:18px}.card{background:#fff;padding:18px;border-radius:20px;margin:12px 0}button,input{font:inherit;padding:11px;border-radius:10px;margin:4px}button{border:0;background:#6f4bf6;color:white;font-weight:700}input{width:calc(100% - 30px);border:1px solid #ccc}.status{white-space:pre-wrap;word-break:break-word;background:#f0edf8;padding:12px;border-radius:10px}</style></head><body><div class="wrap">
+<div class="card"><h1>Soft Week Studio</h1><p>License Server Test</p><div id="s" class="status">Connecting...</div></div>
+<div class="card"><h2>Device A</h2><button onclick="create()">Create License</button><button onclick="activate()">Activate</button><button onclick="makeTransfer()">Create Transfer Token</button><div id="a" class="status">No license.</div></div>
+<div class="card"><h2>Device B</h2><input id="t" placeholder="Transfer token"><button onclick="claim()">Claim Transfer</button><div id="b" class="status">No transfer.</div></div>
+<div class="card"><h2>Verify</h2><button onclick="list()">Show Server Licenses</button><button onclick="revoke()">Revoke</button><div id="v" class="status">Not loaded.</div></div></div>
+<script>
+const API="http://localhost:8787/api",$=x=>document.getElementById(x);let license="",token="";
+function dev(){let x=localStorage.sws_server_device;if(!x){x=crypto.randomUUID();localStorage.sws_server_device=x}return x}
+async function post(p,b){let r=await fetch(API+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}),j=await r.json();if(!r.ok)throw Error(j.error);return j}
+async function health(){try{$("s").textContent=JSON.stringify(await (await fetch(API+"/health")).json(),null,2)}catch(e){$("s").textContent="Server not reachable. Start server.js first."}}
+async function create(){try{let j=await post("/license/create",{});license=j.license.code;$("a").textContent=JSON.stringify(j.license,null,2)}catch(e){$("a").textContent=e.message}}
+async function activate(){try{$("a").textContent=JSON.stringify((await post("/license/activate",{code:license,deviceId:dev()})).license,null,2)}catch(e){$("a").textContent=e.message}}
+async function makeTransfer(){try{let j=await post("/transfer/create",{code:license,deviceId:dev()});token=j.token;$("t").value=token;$("a").textContent+="\n\nTOKEN:\n"+token+"\nExpires: "+new Date(j.expiresAt).toLocaleTimeString()}catch(e){$("a").textContent=e.message}}
+async function claim(){try{$("b").textContent=JSON.stringify(await post("/transfer/claim",{token:$("t").value.trim(),deviceId:dev()}),null,2)}catch(e){$("b").textContent=e.message}}
+async function list(){try{$("v").textContent=JSON.stringify(await (await fetch(API+"/admin/licenses")).json(),null,2)}catch(e){$("v").textContent=e.message}}
+async function revoke(){try{$("v").textContent=JSON.stringify(await post("/license/revoke",{code:license}),null,2)}catch(e){$("v").textContent=e.message}}
+health();
+</script></body></html>
